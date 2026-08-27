@@ -90,7 +90,7 @@ function AbilityController.TryCast(player, abilityId, castSource)
 		return false, { error = "Not enough resource" }
 	end
  
-	-- All checks passed � execute the ability
+	-- All checks passed ? execute the ability
 	SetResource(player, currentResource - ability.ResourceCost)
 	CooldownManager.SetCooldown(player, abilityId, ability.Cooldown)
 

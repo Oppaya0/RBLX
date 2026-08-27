@@ -146,3 +146,5 @@ RunService.Heartbeat:Connect(function(deltaTime)
 		end
 	end
 end)
+
+return true

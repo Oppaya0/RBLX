@@ -17,4 +17,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		abilityRemote:FireServer(ABILITY_ID, "Manual")
 	end
 end)
+
+return true
  

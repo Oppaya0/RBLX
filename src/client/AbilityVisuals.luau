@@ -1,6 +1,6 @@
 -- AbilityVisuals: Client-side visual feedback.
 -- Listens for server events and renders floating damage numbers.
--- The client NEVER calculates damage � it only displays what the server sends.
+-- The client NEVER calculates damage ? it only displays what the server sends.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -66,3 +66,5 @@ abilityVisualRemote.OnClientEvent:Connect(function(caster, abilityId, result)
 		end
 	end
 end)
+
+return true
