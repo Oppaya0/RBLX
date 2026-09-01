@@ -31,6 +31,8 @@ local AbilityData = {
 		Cooldown = 6,
 		HitRange = 0,
 		ShieldDuration = 3,
+		ShieldVisualRadius = 6,
+		ShieldVisualDuration = 0.4,
 	},
 
 	["Whirlwind"] = {

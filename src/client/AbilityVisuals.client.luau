@@ -1,9 +1,9 @@
 -- AbilityVisuals: Client-side visual feedback.
 -- Listens for server events and renders damage numbers + simple ability VFX.
--- The client NEVER calculates damage ? it only displays what the server sends.
+-- The client NEVER calculates damage -- it only displays what the server sends.
 -- Note: these are code-only VFX (Tween-based), not skeletal animations.
 -- Real skeletal animations require an Animation asset made in the Animation Editor
--- and played via Animator:LoadAnimation ? that's a separate workflow, not covered here.
+-- and played via Animator:LoadAnimation -- that's a separate workflow, not covered here.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -47,7 +47,6 @@ local function ShowDamageText(character, damage)
 	end)
 end
 
--- Brief colored highlight flash on the caster's model.
 local function FlashHighlight(character, color, duration)
 	if not character then return end
 	local highlight = Instance.new("Highlight")
@@ -63,7 +62,6 @@ local function FlashHighlight(character, color, duration)
 	end)
 end
 
--- Expanding ring VFX centered on the caster, radius matches the ability's HitRange.
 local function ExpandingRing(character, color, targetRadius, duration)
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not rootPart then return end
@@ -89,18 +87,19 @@ local function ExpandingRing(character, color, targetRadius, duration)
 	end)
 end
 
--- Plays the appropriate simple VFX based on the ability that was cast.
 local function PlayAbilityVFX(casterCharacter, abilityId, abilityType)
 	if not casterCharacter then return end
+	local ability = AbilityData[abilityId]
 
 	if abilityType == "Attack" then
 		FlashHighlight(casterCharacter, Color3.new(1, 0.6, 0.2), 0.15)
 	elseif abilityType == "Dodge" then
 		FlashHighlight(casterCharacter, Color3.new(0.3, 0.6, 1), 0.2)
 	elseif abilityType == "Defense" then
-		ExpandingRing(casterCharacter, Color3.new(1, 0.85, 0.2), 6, 0.4)
+		local radius = (ability and ability.ShieldVisualRadius) or 6
+		local dur = (ability and ability.ShieldVisualDuration) or 0.4
+		ExpandingRing(casterCharacter, Color3.new(1, 0.85, 0.2), radius, dur)
 	elseif abilityType == "Ultimate" then
-		local ability = AbilityData[abilityId]
 		ExpandingRing(casterCharacter, Color3.new(0.8, 0.2, 1), ability and ability.HitRange or 10, 0.5)
 	end
 end
@@ -113,7 +112,9 @@ abilityVisualRemote.OnClientEvent:Connect(function(caster, abilityId, result)
 
 	if result.hits then
 		for _, hit in ipairs(result.hits) do
-			local character = Workspace:FindFirstChild(hit.name)
+			-- Prefer the direct character reference sent by the server; fall back to
+			-- a name lookup only if it's missing (older result shape / safety net).
+			local character = hit.character or Workspace:FindFirstChild(hit.name)
 			if character then
 				ShowDamageText(character, hit.damage)
 			end

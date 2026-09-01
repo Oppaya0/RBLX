@@ -79,7 +79,7 @@ local function DashCharacter(character, distance, duration)
 end
 
 -- Defense-type abilities: mark the player as shielded for a duration.
--- (Placeholder flag for now ? incoming damage reduction will read this once NPCs can hit back.)
+-- (Placeholder flag for now -- incoming damage reduction will read this once NPCs can hit back.)
 local function ApplyShield(player, duration)
 	player:SetAttribute("Shielded", true)
 	task.delay(duration, function()
@@ -114,7 +114,7 @@ function AbilityController.TryCast(player, abilityId, castSource)
 		return false, { error = "Not enough resource" }
 	end
 
-	-- All checks passed ? spend resource and start cooldown before any effect runs.
+	-- All checks passed -- spend resource and start cooldown before any effect runs.
 	SetResource(player, currentResource - ability.ResourceCost)
 	CooldownManager.SetCooldown(player, abilityId, ability.Cooldown)
 
@@ -137,6 +137,7 @@ function AbilityController.TryCast(player, abilityId, castSource)
 	for _, target in ipairs(targets) do
 		target.humanoid:TakeDamage(finalDamage)
 		table.insert(hitResults, {
+			character = target.character, -- direct reference, avoids name-collision bugs on the client
 			name = target.character.Name,
 			damage = finalDamage,
 			health = target.humanoid.Health,
