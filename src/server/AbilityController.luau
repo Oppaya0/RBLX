@@ -12,7 +12,6 @@ local CooldownManager = require(script.Parent.CooldownManager)
 
 local AbilityController = {}
 
--- Player resource state: { [Player] = currentResource }
 local playerResources = {}
 
 local function getBaseMaxResource()
@@ -34,8 +33,6 @@ local function SetResource(player, value)
 	player:SetAttribute("Resource", math.floor(clamped))
 end
 
--- Find valid targets within hit range using GetPartBoundsInRadius (OverlapParams-style).
--- Returns array of { character, humanoid } for all Humanoids in range.
 local function FindTargets(character, hitRange)
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not rootPart then return {} end
@@ -61,9 +58,37 @@ local function FindTargets(character, hitRange)
 	return targets
 end
 
--- Main entry point for ability casting. Returns success (bool), result (table).
+-- Dodge-type abilities: push the character forward using a temporary BodyVelocity.
+local function DashCharacter(character, distance, duration)
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then return end
+
+	local direction = rootPart.CFrame.LookVector
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.MaxForce = Vector3.new(1e5, 0, 1e5)
+	bodyVelocity.Velocity = direction * (distance / duration)
+	bodyVelocity.Name = "DashVelocity"
+	bodyVelocity.Parent = rootPart
+
+	task.delay(duration, function()
+		if bodyVelocity and bodyVelocity.Parent then
+			bodyVelocity:Destroy()
+		end
+	end)
+end
+
+-- Defense-type abilities: mark the player as shielded for a duration.
+-- (Placeholder flag for now ? incoming damage reduction will read this once NPCs can hit back.)
+local function ApplyShield(player, duration)
+	player:SetAttribute("Shielded", true)
+	task.delay(duration, function()
+		if player.Parent then
+			player:SetAttribute("Shielded", false)
+		end
+	end)
+end
+
 function AbilityController.TryCast(player, abilityId, castSource)
-	-- castSource is reserved for future use ("Manual", "Passive", "AutoCast")
 	local ability = AbilityData[abilityId]
 	if not ability then
 		return false, { error = "Unknown ability" }
@@ -79,22 +104,30 @@ function AbilityController.TryCast(player, abilityId, castSource)
 		return false, { error = "Player dead" }
 	end
 
-	-- Check cooldown
 	if not CooldownManager.CanCast(player, abilityId) then
 		return false, { error = "On cooldown" }
 	end
 
-	-- Check resource
 	local currentResource = GetResource(player)
 	if currentResource < ability.ResourceCost then
 		return false, { error = "Not enough resource" }
 	end
- 
-	-- All checks passed ? execute the ability
+
+	-- All checks passed ? spend resource and start cooldown before any effect runs.
 	SetResource(player, currentResource - ability.ResourceCost)
 	CooldownManager.SetCooldown(player, abilityId, ability.Cooldown)
 
-	-- Find targets and deal damage
+	if ability.Type == "Dodge" then
+		DashCharacter(character, ability.DashDistance, ability.DashDuration)
+		return true, { hits = {}, cooldown = ability.Cooldown, abilityType = ability.Type }
+	end
+
+	if ability.Type == "Defense" then
+		ApplyShield(player, ability.ShieldDuration)
+		return true, { hits = {}, cooldown = ability.Cooldown, abilityType = ability.Type }
+	end
+
+	-- Attack and Ultimate both deal damage in a radius; only the numbers differ.
 	local targets = FindTargets(character, ability.HitRange)
 	local hitResults = {}
 	for _, target in ipairs(targets) do
@@ -103,13 +136,12 @@ function AbilityController.TryCast(player, abilityId, castSource)
 			name = target.character.Name,
 			damage = ability.Damage,
 			health = target.humanoid.Health,
-	})
+		})
 	end
 
-	return true, { hits = hitResults, cooldown = ability.Cooldown }
+	return true, { hits = hitResults, cooldown = ability.Cooldown, abilityType = ability.Type }
 end
 
--- Regenerate resource for all players. Called from the centralized Heartbeat ticker.
 function AbilityController.TickResource(deltaTime)
 	local regen = CharacterStats.Base.ResourceRegen
 	for player, _ in pairs(playerResources) do
@@ -119,7 +151,6 @@ function AbilityController.TickResource(deltaTime)
 				local oldResource = playerResources[player]
 				local newResource = math.clamp(oldResource + regen * deltaTime, 0, getBaseMaxResource())
 				playerResources[player] = newResource
-				-- Only replicate when the integer value changes (reduces network traffic)
 				if math.floor(newResource) ~= math.floor(oldResource) then
 					player:SetAttribute("Resource", math.floor(newResource))
 				end

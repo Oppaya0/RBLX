@@ -1,6 +1,6 @@
--- HUD: Minimal heads-up display for the vertical slice.
--- Shows HP bar, Resource bar, and ability cooldown status.
--- Reads resource from a server-set player attribute (server is the authority).
+-- HUD: Full heads-up display for the vertical slice.
+-- HP bar, Resource bar, and 4 ability slots with per-ability cooldown fill.
+-- Reads resource/HP from server-authoritative sources only; never calculates them.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,46 +8,60 @@ local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local abilityVisualRemote = ReplicatedStorage.Remotes.AbilityVisualRemote
+local AbilityData = require(ReplicatedStorage.Shared.AbilityData)
+local CharacterStats = require(ReplicatedStorage.Shared.CharacterStats)
 
-local MAX_RESOURCE = 100
+local MAX_RESOURCE = CharacterStats.Base.Resource
 
--- Create the HUD GUI
+-- Ordered list of abilities shown in the bar, with their key label and color.
+-- Color matches the VFX colors used in AbilityVisuals, for visual consistency.
+local ABILITY_SLOTS = {
+	{ id = "Slash",     key = "Q",     color = Color3.new(1, 0.6, 0.2) },
+	{ id = "Dash",      key = "SHIFT", color = Color3.new(0.3, 0.6, 1) },
+	{ id = "Guard",     key = "F",     color = Color3.new(1, 0.85, 0.2) },
+	{ id = "Whirlwind", key = "R",     color = Color3.new(0.8, 0.2, 1) },
+}
+
+-- === Root GUI ===
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AbilityHUD"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
-local container = Instance.new("Frame")
-container.Size = UDim2.new(0, 250, 0, 120)
-container.Position = UDim2.new(0, 10, 1, -130)
-container.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
-container.BackgroundTransparency = 0.3
-container.BorderSizePixel = 2
-container.BorderColor3 = Color3.new(0.3, 0.3, 0.3)
-container.Parent = screenGui
+-- === HP / Resource panel (top-left) ===
+local statsPanel = Instance.new("Frame")
+statsPanel.Size = UDim2.new(0, 250, 0, 74)
+statsPanel.Position = UDim2.new(0, 10, 0, 10)
+statsPanel.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+statsPanel.BackgroundTransparency = 0.3
+statsPanel.BorderSizePixel = 0
+statsPanel.Parent = screenGui
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = container
+local statsCorner = Instance.new("UICorner")
+statsCorner.CornerRadius = UDim.new(0, 8)
+statsCorner.Parent = statsPanel
 
--- HP label and bar
 local hpLabel = Instance.new("TextLabel")
-hpLabel.Size = UDim2.new(1, -20, 0, 20)
-hpLabel.Position = UDim2.new(0, 10, 0, 10)
+hpLabel.Size = UDim2.new(1, -20, 0, 18)
+hpLabel.Position = UDim2.new(0, 10, 0, 6)
 hpLabel.BackgroundTransparency = 1
 hpLabel.Text = "HP: 100/100"
 hpLabel.TextColor3 = Color3.new(1, 1, 1)
 hpLabel.TextXAlignment = Enum.TextXAlignment.Left
 hpLabel.Font = Enum.Font.GothamBold
-hpLabel.TextSize = 14
-hpLabel.Parent = container
+hpLabel.TextSize = 13
+hpLabel.Parent = statsPanel
 
 local hpBarBg = Instance.new("Frame")
-hpBarBg.Size = UDim2.new(1, -20, 0, 12)
-hpBarBg.Position = UDim2.new(0, 10, 0, 32)
+hpBarBg.Size = UDim2.new(1, -20, 0, 10)
+hpBarBg.Position = UDim2.new(0, 10, 0, 26)
 hpBarBg.BackgroundColor3 = Color3.new(0.2, 0, 0)
 hpBarBg.BorderSizePixel = 0
-hpBarBg.Parent = container
+hpBarBg.Parent = statsPanel
+
+local hpBarBgCorner = Instance.new("UICorner")
+hpBarBgCorner.CornerRadius = UDim.new(0, 4)
+hpBarBgCorner.Parent = hpBarBg
 
 local hpBarFill = Instance.new("Frame")
 hpBarFill.Size = UDim2.new(1, 0, 1, 0)
@@ -55,24 +69,31 @@ hpBarFill.BackgroundColor3 = Color3.new(0.8, 0.1, 0.1)
 hpBarFill.BorderSizePixel = 0
 hpBarFill.Parent = hpBarBg
 
--- Resource label and bar
+local hpBarFillCorner = Instance.new("UICorner")
+hpBarFillCorner.CornerRadius = UDim.new(0, 4)
+hpBarFillCorner.Parent = hpBarFill
+
 local resourceLabel = Instance.new("TextLabel")
-resourceLabel.Size = UDim2.new(1, -20, 0, 20)
-resourceLabel.Position = UDim2.new(0, 10, 0, 52)
+resourceLabel.Size = UDim2.new(1, -20, 0, 18)
+resourceLabel.Position = UDim2.new(0, 10, 0, 40)
 resourceLabel.BackgroundTransparency = 1
 resourceLabel.Text = "Resource: 100/100"
 resourceLabel.TextColor3 = Color3.new(1, 1, 1)
 resourceLabel.TextXAlignment = Enum.TextXAlignment.Left
 resourceLabel.Font = Enum.Font.GothamBold
-resourceLabel.TextSize = 14
-resourceLabel.Parent = container
+resourceLabel.TextSize = 13
+resourceLabel.Parent = statsPanel
 
 local resourceBarBg = Instance.new("Frame")
-resourceBarBg.Size = UDim2.new(1, -20, 0, 12)
-resourceBarBg.Position = UDim2.new(0, 10, 0, 74)
+resourceBarBg.Size = UDim2.new(1, -20, 0, 10)
+resourceBarBg.Position = UDim2.new(0, 10, 0, 60)
 resourceBarBg.BackgroundColor3 = Color3.new(0, 0, 0.2)
 resourceBarBg.BorderSizePixel = 0
-resourceBarBg.Parent = container
+resourceBarBg.Parent = statsPanel
+
+local resourceBarBgCorner = Instance.new("UICorner")
+resourceBarBgCorner.CornerRadius = UDim.new(0, 4)
+resourceBarBgCorner.Parent = resourceBarBg
 
 local resourceBarFill = Instance.new("Frame")
 resourceBarFill.Size = UDim2.new(1, 0, 1, 0)
@@ -80,19 +101,93 @@ resourceBarFill.BackgroundColor3 = Color3.new(0.2, 0.4, 1)
 resourceBarFill.BorderSizePixel = 0
 resourceBarFill.Parent = resourceBarBg
 
--- Ability cooldown indicator
-local abilityLabel = Instance.new("TextLabel")
-abilityLabel.Size = UDim2.new(1, -20, 0, 20)
-abilityLabel.Position = UDim2.new(0, 10, 0, 94)
-abilityLabel.BackgroundTransparency = 1
-abilityLabel.Text = "[Q] Slash - Ready"
-abilityLabel.TextColor3 = Color3.new(0, 1, 0)
-abilityLabel.TextXAlignment = Enum.TextXAlignment.Left
-abilityLabel.Font = Enum.Font.GothamBold
-abilityLabel.TextSize = 14
-abilityLabel.Parent = container
+local resourceBarFillCorner = Instance.new("UICorner")
+resourceBarFillCorner.CornerRadius = UDim.new(0, 4)
+resourceBarFillCorner.Parent = resourceBarFill
 
--- Update HP bar when character spawns/respawns
+-- === Ability bar (bottom-center) ===
+local SLOT_SIZE = 64
+local SLOT_GAP = 10
+local totalWidth = (#ABILITY_SLOTS * SLOT_SIZE) + ((#ABILITY_SLOTS - 1) * SLOT_GAP)
+
+local abilityBar = Instance.new("Frame")
+abilityBar.Size = UDim2.new(0, totalWidth, 0, SLOT_SIZE + 20)
+abilityBar.Position = UDim2.new(0.5, -totalWidth / 2, 1, -(SLOT_SIZE + 30))
+abilityBar.BackgroundTransparency = 1
+abilityBar.Parent = screenGui
+
+-- Holds per-ability UI references and cooldown state, keyed by abilityId.
+local abilitySlots = {}
+
+for index, slotData in ipairs(ABILITY_SLOTS) do
+	local ability = AbilityData[slotData.id]
+
+	local slot = Instance.new("Frame")
+	slot.Size = UDim2.new(0, SLOT_SIZE, 0, SLOT_SIZE)
+	slot.Position = UDim2.new(0, (index - 1) * (SLOT_SIZE + SLOT_GAP), 0, 0)
+	slot.BackgroundColor3 = slotData.color
+	slot.BorderSizePixel = 0
+	slot.Parent = abilityBar
+
+	local slotCorner = Instance.new("UICorner")
+	slotCorner.CornerRadius = UDim.new(0, 10)
+	slotCorner.Parent = slot
+
+	-- Cooldown overlay: dark frame that shrinks from top to bottom as cooldown ends.
+	local overlay = Instance.new("Frame")
+	overlay.Size = UDim2.new(1, 0, 0, 0)
+	overlay.Position = UDim2.new(0, 0, 0, 0)
+	overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+	overlay.BackgroundTransparency = 0.35
+	overlay.BorderSizePixel = 0
+	overlay.ZIndex = 2
+	overlay.Parent = slot
+
+	local overlayCorner = Instance.new("UICorner")
+	overlayCorner.CornerRadius = UDim.new(0, 10)
+	overlayCorner.Parent = overlay
+
+	local cooldownText = Instance.new("TextLabel")
+	cooldownText.Size = UDim2.new(1, 0, 1, 0)
+	cooldownText.BackgroundTransparency = 1
+	cooldownText.Text = ""
+	cooldownText.TextColor3 = Color3.new(1, 1, 1)
+	cooldownText.TextStrokeColor3 = Color3.new(0, 0, 0)
+	cooldownText.TextStrokeTransparency = 0
+	cooldownText.Font = Enum.Font.GothamBold
+	cooldownText.TextSize = 20
+	cooldownText.ZIndex = 3
+	cooldownText.Parent = slot
+
+	local keyLabel = Instance.new("TextLabel")
+	keyLabel.Size = UDim2.new(1, 0, 0, 16)
+	keyLabel.Position = UDim2.new(0, 0, 1, 2)
+	keyLabel.BackgroundTransparency = 1
+	keyLabel.Text = slotData.key
+	keyLabel.TextColor3 = Color3.new(1, 1, 1)
+	keyLabel.Font = Enum.Font.GothamBold
+	keyLabel.TextSize = 12
+	keyLabel.Parent = slot
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, 0, 0, 16)
+	nameLabel.Position = UDim2.new(0, 0, 1, 18)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = ability and ability.DisplayName or slotData.id
+	nameLabel.TextColor3 = Color3.new(0.7, 0.7, 0.7)
+	nameLabel.Font = Enum.Font.Gotham
+	nameLabel.TextSize = 11
+	nameLabel.Parent = slot
+
+	abilitySlots[slotData.id] = {
+		overlay = overlay,
+		cooldownText = cooldownText,
+		maxCooldown = ability and ability.Cooldown or 1,
+		remaining = 0,
+	}
+end
+
+-- === HP tracking ===
 local function setupCharacter(character)
 	local humanoid = character:WaitForChild("Humanoid")
 
@@ -112,7 +207,7 @@ if player.Character then
 end
 player.CharacterAdded:Connect(setupCharacter)
 
--- Update resource bar from server-set attribute
+-- === Resource tracking ===
 local function updateResource()
 	local resource = player:GetAttribute("Resource") or MAX_RESOURCE
 	resourceLabel.Text = string.format("Resource: %d/%d", math.floor(resource), MAX_RESOURCE)
@@ -122,27 +217,29 @@ end
 player:GetAttributeChangedSignal("Resource"):Connect(updateResource)
 updateResource()
 
--- Track cooldown locally for display (server is still the authority)
-local cooldownRemaining = 0
-
+-- === Cooldown tracking (per-ability, client-side display only) ===
 abilityVisualRemote.OnClientEvent:Connect(function(caster, abilityId, result)
 	if caster ~= player then return end
 	if not result or result.error then return end
-	if result.cooldown then
-		cooldownRemaining = result.cooldown
+
+	local slot = abilitySlots[abilityId]
+	if slot and result.cooldown then
+		slot.remaining = result.cooldown
 	end
 end)
 
--- Countdown using Heartbeat (no per-player while-loop on server; this is client-side only)
 RunService.Heartbeat:Connect(function(deltaTime)
-	if cooldownRemaining > 0 then
-		cooldownRemaining = math.max(0, cooldownRemaining - deltaTime)
-		if cooldownRemaining > 0 then
-			abilityLabel.Text = string.format("[Q] Slash - %.1fs", cooldownRemaining)
-			abilityLabel.TextColor3 = Color3.new(1, 0.5, 0)
-		else
-			abilityLabel.Text = "[Q] Slash - Ready"
-			abilityLabel.TextColor3 = Color3.new(0, 1, 0)
+	for _, slot in pairs(abilitySlots) do
+		if slot.remaining > 0 then
+			slot.remaining = math.max(0, slot.remaining - deltaTime)
+			local alpha = slot.remaining / slot.maxCooldown
+			slot.overlay.Size = UDim2.new(1, 0, alpha, 0)
+			if slot.remaining > 0 then
+				slot.cooldownText.Text = string.format("%.1f", slot.remaining)
+			else
+				slot.cooldownText.Text = ""
+				slot.overlay.Size = UDim2.new(1, 0, 0, 0)
+			end
 		end
 	end
 end)
