@@ -180,6 +180,7 @@ for index, slotData in ipairs(ABILITY_SLOTS) do
 	nameLabel.Parent = slot
 
 	abilitySlots[slotData.id] = {
+		frame = slot,
 		overlay = overlay,
 		cooldownText = cooldownText,
 		maxCooldown = ability and ability.Cooldown or 1,
@@ -243,5 +244,107 @@ RunService.Heartbeat:Connect(function(deltaTime)
 		end
 	end
 end)
+
+-- === Tooltip on hover ===
+local tooltip = Instance.new("Frame")
+tooltip.Size = UDim2.new(0, 220, 0, 90)
+tooltip.BackgroundColor3 = Color3.new(0.05, 0.05, 0.05)
+tooltip.BackgroundTransparency = 0.1
+tooltip.BorderSizePixel = 0
+tooltip.Visible = false
+tooltip.ZIndex = 10
+tooltip.Parent = screenGui
+
+local tooltipCorner = Instance.new("UICorner")
+tooltipCorner.CornerRadius = UDim.new(0, 8)
+tooltipCorner.Parent = tooltip
+
+local tooltipText = Instance.new("TextLabel")
+tooltipText.Size = UDim2.new(1, -16, 1, -16)
+tooltipText.Position = UDim2.new(0, 8, 0, 8)
+tooltipText.BackgroundTransparency = 1
+tooltipText.TextColor3 = Color3.new(1, 1, 1)
+tooltipText.TextXAlignment = Enum.TextXAlignment.Left
+tooltipText.TextYAlignment = Enum.TextYAlignment.Top
+tooltipText.TextWrapped = true
+tooltipText.Font = Enum.Font.Gotham
+tooltipText.TextSize = 13
+tooltipText.ZIndex = 11
+tooltipText.Parent = tooltip
+
+for _, slotData in ipairs(ABILITY_SLOTS) do
+	local ability = AbilityData[slotData.id]
+	local slotFrame = abilityBar:FindFirstChild(nil) -- placeholder, replaced below
+end
+
+-- Re-fetch actual slot frames by index since they were created positionally above.
+for index, slotData in ipairs(ABILITY_SLOTS) do
+	local slotFrame = abilityBar:GetChildren()[index]
+	if slotFrame then
+		local ability = AbilityData[slotData.id]
+		slotFrame.MouseEnter:Connect(function()
+			local lines = {
+				ability.DisplayName,
+				ability.Description,
+				string.format("Cooldown: %.1fs   Cost: %d", ability.Cooldown, ability.ResourceCost),
+			}
+			if ability.Damage and ability.Damage > 0 then
+				table.insert(lines, 3, string.format("Base Damage: %d", ability.Damage))
+			end
+			tooltipText.Text = table.concat(lines, "\n")
+			tooltip.Position = UDim2.new(0.5, -110, 1, -(SLOT_SIZE + 30 + 100))
+			tooltip.Visible = true
+		end)
+		slotFrame.MouseLeave:Connect(function()
+			tooltip.Visible = false
+		end)
+	end
+end
+
+-- === Tooltip on hover: shows description, base damage, cooldown, and resource cost ===
+local tooltip = Instance.new("Frame")
+tooltip.Size = UDim2.new(0, 220, 0, 90)
+tooltip.BackgroundColor3 = Color3.new(0.05, 0.05, 0.05)
+tooltip.BackgroundTransparency = 0.1
+tooltip.BorderSizePixel = 0
+tooltip.Visible = false
+tooltip.ZIndex = 10
+tooltip.Parent = screenGui
+
+local tooltipCorner = Instance.new("UICorner")
+tooltipCorner.CornerRadius = UDim.new(0, 8)
+tooltipCorner.Parent = tooltip
+
+local tooltipText = Instance.new("TextLabel")
+tooltipText.Size = UDim2.new(1, -16, 1, -16)
+tooltipText.Position = UDim2.new(0, 8, 0, 8)
+tooltipText.BackgroundTransparency = 1
+tooltipText.TextColor3 = Color3.new(1, 1, 1)
+tooltipText.TextXAlignment = Enum.TextXAlignment.Left
+tooltipText.TextYAlignment = Enum.TextYAlignment.Top
+tooltipText.TextWrapped = true
+tooltipText.Font = Enum.Font.Gotham
+tooltipText.TextSize = 13
+tooltipText.ZIndex = 11
+tooltipText.Parent = tooltip
+
+for slotId, slot in pairs(abilitySlots) do
+	local ability = AbilityData[slotId]
+	if slot.frame and ability then
+		slot.frame.MouseEnter:Connect(function()
+			local lines = { ability.DisplayName, ability.Description }
+			if ability.Damage and ability.Damage > 0 then
+				table.insert(lines, string.format("Base Damage: %d", ability.Damage))
+			end
+			table.insert(lines, string.format("Cooldown: %.1fs   Cost: %d", ability.Cooldown, ability.ResourceCost))
+			tooltipText.Text = table.concat(lines, "\n")
+			tooltip.Position = UDim2.new(0.5, -110, 1, -(SLOT_SIZE + 30 + 100))
+			tooltip.Visible = true
+		end)
+		slot.frame.MouseLeave:Connect(function()
+			tooltip.Visible = false
+		end)
+	end
+end
 
 return true

@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local PlayerStats = require(script.Parent.PlayerStats)
 local AbilityController = require(script.Parent.AbilityController)
 local CooldownManager = require(script.Parent.CooldownManager)
 local CharacterStats = require(ReplicatedStorage.Shared.CharacterStats)
@@ -63,4 +64,5 @@ end
 -- Cleanup when players leave
 Players.PlayerRemoving:Connect(function(player)
 	AbilityController.ClearPlayer(player)
+	PlayerStats.ClearPlayer(player)
 end)

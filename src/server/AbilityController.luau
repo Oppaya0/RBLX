@@ -6,6 +6,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local PlayerStats = require(script.Parent.PlayerStats)
 local AbilityData = require(ReplicatedStorage.Shared.AbilityData)
 local CharacterStats = require(ReplicatedStorage.Shared.CharacterStats)
 local CooldownManager = require(script.Parent.CooldownManager)
@@ -128,13 +129,16 @@ function AbilityController.TryCast(player, abilityId, castSource)
 	end
 
 	-- Attack and Ultimate both deal damage in a radius; only the numbers differ.
+	local multiplier = PlayerStats.GetMultiplier(player)
+	local finalDamage = math.floor(ability.Damage * multiplier + 0.5)
+
 	local targets = FindTargets(character, ability.HitRange)
 	local hitResults = {}
 	for _, target in ipairs(targets) do
-		target.humanoid:TakeDamage(ability.Damage)
+		target.humanoid:TakeDamage(finalDamage)
 		table.insert(hitResults, {
 			name = target.character.Name,
-			damage = ability.Damage,
+			damage = finalDamage,
 			health = target.humanoid.Health,
 		})
 	end
