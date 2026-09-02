@@ -8,10 +8,17 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PlayerStats = require(script.Parent.PlayerStats)
 local AbilityController = require(script.Parent.AbilityController)
 local CooldownManager = require(script.Parent.CooldownManager)
+local UpgradeManager = require(script.Parent.UpgradeManager)
 local CharacterStats = require(ReplicatedStorage.Shared.CharacterStats)
 
 local abilityRemote = ReplicatedStorage.Remotes.AbilityRemote
 local abilityVisualRemote = ReplicatedStorage.Remotes.AbilityVisualRemote
+
+-- TEMPORARY (test-only): manually create this RemoteEvent in Studio under
+-- ReplicatedStorage/Remotes, same place as the two above. Used only to test
+-- UpgradeManager.Purchase/CanPurchase in isolation, before any upgrade
+-- effect is wired into AbilityController. Remove once real upgrade UI exists.
+local upgradeRemote = ReplicatedStorage.Remotes.UpgradeRemote
 
 -- Handle ability cast requests from clients
 abilityRemote.OnServerEvent:Connect(function(player, abilityId, castSource)
@@ -27,6 +34,28 @@ abilityRemote.OnServerEvent:Connect(function(player, abilityId, castSource)
 		-- Fire failure feedback only to the casting player
 		abilityVisualRemote:FireClient(player, abilityId, result)
 	end
+end)
+
+-- TEMPORARY (test-only): handles "Purchase" requests from UpgradeTestInput.client.luau.
+-- Only exercises UpgradeManager.Purchase/CanPurchase -- does NOT touch AbilityController.
+upgradeRemote.OnServerEvent:Connect(function(player, action, upgradeId)
+	if action ~= "Purchase" then
+		return
+	end
+
+	local success, reason = UpgradeManager.Purchase(player, upgradeId)
+	local newLevel = UpgradeManager.GetLevel(player, upgradeId)
+
+	print(string.format(
+		"[UpgradeTest] %s -> %s: success=%s reason=%s newLevel=%d",
+		player.Name,
+		tostring(upgradeId),
+		tostring(success),
+		tostring(reason),
+		newLevel
+	))
+
+	upgradeRemote:FireClient(player, "Result", upgradeId, success, reason, newLevel)
 end)
 
 -- Centralized Heartbeat ticker: single loop for ALL players.
@@ -65,4 +94,5 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	AbilityController.ClearPlayer(player)
 	PlayerStats.ClearPlayer(player)
+	UpgradeManager.ClearPlayer(player) -- was missing; per-player state must always be cleared
 end)
